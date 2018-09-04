@@ -1,0 +1,54 @@
+
+settings {
+   logfile    = "/dev/stdout",
+   nodaemon   = true,
+}
+
+port = 2222
+remote = "sreader@192.168.43.139"
+
+ensure_target = function(event)
+	local cmd = 
+	-- connect to server and go to dst dir
+		'sh -c \'ssh -T -x -p '..port..' '..remote..' "sh -c \\\"mkdir -p \\\\\\\"'
+		..event.target..
+	-- write files
+		'\\\\\\\" \\\" " \''
+
+	os.execute(cmd)
+end
+
+up = function(event)
+	local cmd = 
+	-- go to src dir
+		'sh -c \'cd "'
+		..event.source..
+	-- read files
+		'"; tar cf - "./'
+		..event.path..
+	-- connect to server and go to dst dir
+		'" | ssh -T -x -p '..port..' '..remote..' "sh -c \\\"cd \\\\\\\"'
+		..event.target..
+	-- write files
+		'\\\\\\\"; tar xvf -\\\" " \''
+
+	spawnShell(event, cmd)
+end
+
+
+bash = {
+    maxProcesses = 2,
+    onCreate = up,
+    onModify = up,
+    onDelete = "echo 'deletion not supported: ^targetPathname'",
+    onMove   = "mv ^o.targetPathname ^d.targetPathname",
+    onStartup = function(event)
+		ensure_target(event)
+		up(event)
+	end,
+}
+
+sync{bash, 
+	source="/tmp/src",
+	target="/tmp/dst",
+}
